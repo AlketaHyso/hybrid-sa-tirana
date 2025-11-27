@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Hybrid Greedy + Simulated Annealing – Tirana Route</title>
+  <title>Hybrid Greedy + SA – Tirana (Seeded Mobile Version)</title>
 
   <!-- Leaflet CSS -->
   <link
@@ -15,8 +15,6 @@
     header { padding: 10px; background: #0b5394; color: white; text-align: center; }
     main { padding: 10px; }
     #controls { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    #controls label { font-size: 14px; }
-    #controls input { width: 70px; }
     button {
       padding: 6px 10px;
       border-radius: 4px;
@@ -42,363 +40,358 @@
 </head>
 
 <body>
-  <header>
-    <h2>Hybrid Greedy + SA – Tirana (31-point route)</h2>
-  </header>
+<header>
+  <h2>Hybrid Greedy + SA – Tirana (31-point route, seeded)</h2>
+</header>
 
-  <main>
-    <div id="controls">
-      <button id="runBtn">Run Algorithm</button>
+<main>
+  <div id="controls">
+    <button id="runBtn">Run Hybrid Greedy + SA</button>
+  </div>
 
-      <label>
-        Runs:
-        <input type="number" id="nRuns" value="30" min="1" max="100" />
-      </label>
-
-      <label>
-        T₀:
-        <input type="number" id="temperature" value="5000" />
-      </label>
-
-      <label>
-        Cooling:
-        <input type="number" step="0.0005" id="cooling" value="0.996" />
-      </label>
+  <div id="output">
+    <div><strong>Status:</strong> <span id="status">Ready.</span></div>
+    <div>
+      <strong>Execution time:</strong> <span id="time">-</span><br>
+      <span class="small">
+        Execution time is measured directly on this mobile device using
+        <code>performance.now()</code>, the high-resolution timer provided by the browser engine.
+      </span>
     </div>
+    <div><strong>Total distance:</strong> <span id="dist">-</span></div>
+    <div id="route-list"></div>
+  </div>
 
-    <div id="output">
-      <div><strong>Status:</strong> <span id="status">Ready.</span></div>
-      <div><strong>Execution time:</strong> <span id="time">-</span></div>
-      <div><strong>Total distance:</strong> <span id="dist">-</span></div>
+  <div id="map"></div>
+</main>
 
-      <div class="small">
-        (Execution time is measured using <code>performance.now()</code> on this device.)
-      </div>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-      <div id="route-list"></div>
-    </div>
+<script>
+  // ===================== 1. Points list (L3 – 31 locations) =====================
+  const L3 = [
+    ["Kalaja", [41.3275, 19.8189]],
+    ["Muzeu Historik", [41.3305, 19.8189]],
+    ["Parku i Qytetit", [41.3161, 19.8271]],
+    ["Teatri Kombëtar", [41.3270, 19.8198]],
+    ["Sheshi Kryesor", [41.3280, 19.8200]],
+    ["Katedralja", [41.3285, 19.8208]],
+    ["Pazari i Ri", [41.3308, 19.8223]],
+    ["Stadiumi Air Albania", [41.3191, 19.8167]],
+    ["Biblioteka Qendrore", [41.3278, 19.8197]],
+    ["Galeria e Arteve", [41.3279, 19.8195]],
+    ["Tregu Tradicional", [41.3282, 19.8215]],
+    ["Ura e Vjetër", [41.3260, 19.8140]],
+    ["Amfiteatri", [41.3290, 19.8230]],
+    ["Kopshti Botanik", [41.3220, 19.8280]],
+    ["Liqeni Artificial", [41.3150, 19.8240]],
+    ["Qendra Tregtare", [41.3310, 19.8205]],
+    ["Xhamia e Vjetër", [41.3295, 19.8190]],
+    ["Kisha Mesjetare", [41.3288, 19.8185]],
+    ["Monumenti i Lirisë", [41.3272, 19.8210]],
+    ["Tregu i Vjetër", [41.3300, 19.8235]],
+    ["Muzeu i Artit", [41.3265, 19.8202]],
+    ["Shtëpia e Pavarësisë", [41.3258, 19.8197]],
+    ["Kampi Veror", [41.3215, 19.8260]],
+    ["Parku i Shpendëve", [41.3195, 19.8290]],
+    ["Kështjella Romake", [41.3277, 19.8178]],
+    ["Galeria Moderne", [41.3283, 19.8204]],
+    ["Kinema Historike", [41.3298, 19.8212]],
+    ["Qyteti i Vjetër", [41.3270, 19.8225]],
+    ["Burimi Natyror", [41.3230, 19.8255]],
+    ["Shkolla e Parë", [41.3262, 19.8194]],
+    ["Ujëvara", [41.3187, 19.8132]]
+  ];
 
-    <div id="map"></div>
-  </main>
+  const numPoints = L3.length;
+  const names = L3.map(p => p[0]);
+  const coords = L3.map(p => p[1]);
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  // ===================== 2. Seeded PRNG (LCG) =====================
+  function LCG(seed) {
+    let state = seed % 2147483647;
+    if (state <= 0) state += 2147483646;
 
-  <script>
-    // ===================== 1. Points list (L3 – 31 locations) =====================
-    // Names remain in Albanian as requested.
-    const L3 = [
-      ["Kalaja", [41.3275, 19.8189]],
-      ["Muzeu Historik", [41.3305, 19.8189]],
-      ["Parku i Qytetit", [41.3161, 19.8271]],
-      ["Teatri Kombëtar", [41.327, 19.8198]],
-      ["Sheshi Kryesor", [41.328, 19.82]],
-      ["Katedralja", [41.3285, 19.8208]],
-      ["Pazari i Ri", [41.3308, 19.8223]],
-      ["Stadiumi Air Albania", [41.3191, 19.8167]],
-      ["Biblioteka Qendrore", [41.3278, 19.8197]],
-      ["Galeria e Arteve", [41.3279, 19.8195]],
-      ["Tregu Tradicional", [41.3282, 19.8215]],
-      ["Ura e Vjetër", [41.326, 19.814]],
-      ["Amfiteatri", [41.329, 19.823]],
-      ["Kopshti Botanik", [41.322, 19.828]],
-      ["Liqeni Artificial", [41.315, 19.824]],
-      ["Qendra Tregtare", [41.331, 19.8205]],
-      ["Xhamia e Vjetër", [41.3295, 19.819]],
-      ["Kisha Mesjetare", [41.3288, 19.8185]],
-      ["Monumenti i Lirisë", [41.3272, 19.821]],
-      ["Tregu i Vjetër", [41.33, 19.8235]],
-      ["Muzeu i Artit", [41.3265, 19.8202]],
-      ["Shtëpia e Pavarësisë", [41.3258, 19.8197]],
-      ["Kampi Veror", [41.3215, 19.826]],
-      ["Parku i Shpendëve", [41.3195, 19.829]],
-      ["Kështjella Romake", [41.3277, 19.8178]],
-      ["Galeria Moderne", [41.3283, 19.8204]],
-      ["Kinema Historike", [41.3298, 19.8212]],
-      ["Qyteti i Vjetër", [41.327, 19.8225]],
-      ["Burimi Natyror", [41.323, 19.8255]],
-      ["Shkolla e Parë", [41.3262, 19.8194]],
-      ["Ujëvara", [41.3187, 19.8132]]
-    ];
+    return function () {
+      state = (state * 16807) % 2147483647;
+      return (state - 1) / 2147483646;
+    };
+  }
 
-    const numPoints = L3.length;
-    const names = L3.map(p => p[0]);
-    const coords = L3.map(p => p[1]);
+  function randInt(max, rng) {
+    return Math.floor(rng() * max);
+  }
 
-    // ===================== 2. Haversine distance & matrix =====================
-    function haversine_m(lat1, lon1, lat2, lon2) {
-      const R = 6371000.0;
-      const toRad = x => (x * Math.PI) / 180.0;
-
-      const phi1 = toRad(lat1);
-      const phi2 = toRad(lat2);
-      const dphi = toRad(lat2 - lat1);
-      const dlambda = toRad(lon2 - lon1);
-
-      const sinDphi2 = Math.sin(dphi / 2);
-      const sinDlambda2 = Math.sin(dlambda / 2);
-
-      const a =
-        sinDphi2 * sinDphi2 +
-        Math.cos(phi1) * Math.cos(phi2) * sinDlambda2 * sinDlambda2;
-
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return R * c;
+  function randomSample2(n, rng) {
+    let i = randInt(n, rng);
+    let j = randInt(n, rng);
+    while (j === i) {
+      j = randInt(n, rng);
     }
+    if (i > j) {
+      const tmp = i;
+      i = j;
+      j = tmp;
+    }
+    return [i, j];
+  }
 
-    // Precompute full distance matrix
-    const distMatrix = Array.from({ length: numPoints }, () =>
-      Array(numPoints).fill(0)
-    );
+  // ===================== 3. Haversine & distance matrix =====================
+  function haversine_m(lat1, lon1, lat2, lon2) {
+    const R = 6371000.0;
+    const toRad = x => (x * Math.PI) / 180.0;
 
+    const phi1 = toRad(lat1);
+    const phi2 = toRad(lat2);
+    const dphi = toRad(lat2 - lat1);
+    const dlambda = toRad(lon2 - lon1);
+
+    const sinDphi2 = Math.sin(dphi / 2);
+    const sinDlambda2 = Math.sin(dlambda / 2);
+
+    const a =
+      sinDphi2 * sinDphi2 +
+      Math.cos(phi1) * Math.cos(phi2) * sinDlambda2 * sinDlambda2;
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  const distMatrix = Array.from({ length: numPoints }, () =>
+    Array(numPoints).fill(0)
+  );
+
+  for (let i = 0; i < numPoints; i++) {
+    const [lat1, lon1] = coords[i];
+    for (let j = 0; j < numPoints; j++) {
+      if (i === j) {
+        distMatrix[i][j] = 0.0;
+      } else {
+        const [lat2, lon2] = coords[j];
+        distMatrix[i][j] = haversine_m(lat1, lon1, lat2, lon2);
+      }
+    }
+  }
+
+  function pairCost(u, v) {
+    return distMatrix[u][v];
+  }
+
+  function routeCost(route) {
+    let tot = 0.0;
+    const n = route.length;
+    for (let i = 0; i < n; i++) {
+      const a = route[i];
+      const b = route[(i + 1) % n];
+      tot += pairCost(a, b);
+    }
+    return tot;
+  }
+
+  // ===================== 4. Greedy init =====================
+  function greedyInitRoute(start = 0) {
+    const unvis = new Set();
     for (let i = 0; i < numPoints; i++) {
-      const [lat1, lon1] = coords[i];
-      for (let j = 0; j < numPoints; j++) {
-        if (i === j) {
-          distMatrix[i][j] = 0.0;
-        } else {
-          const [lat2, lon2] = coords[j];
-          distMatrix[i][j] = haversine_m(lat1, lon1, lat2, lon2);
-        }
-      }
+      unvis.add(i);
     }
+    const route = [start];
+    unvis.delete(start);
+    let cur = start;
 
-    function pairCost(u, v) {
-      const d = distMatrix[u][v];
-      if (Number.isFinite(d)) return d;
-
-      // 2-hop repair (kept for consistency with Python version)
-      let best = Infinity;
-      for (let k = 0; k < numPoints; k++) {
-        if (k === u || k === v) continue;
-        const dk = distMatrix[u][k];
-        const kv = distMatrix[k][v];
-        if (Number.isFinite(dk) && Number.isFinite(kv)) {
-          const val = dk + kv;
-          if (val < best) best = val;
+    while (unvis.size > 0) {
+      let bestJ = null;
+      let bestD = Infinity;
+      for (const j of unvis) {
+        const d = pairCost(cur, j);
+        if (d < bestD) {
+          bestD = d;
+          bestJ = j;
         }
       }
-      return Number.isFinite(best) ? best : 1e12; // large penalty
+      route.push(bestJ);
+      unvis.delete(bestJ);
+      cur = bestJ;
     }
+    return route;
+  }
 
-    function routeCost(route) {
-      let tot = 0.0;
-      const n = route.length;
-      for (let i = 0; i < n; i++) {
-        const a = route[i];
-        const b = route[(i + 1) % n];
-        tot += pairCost(a, b);
-      }
-      return tot;
-    }
+  // ===================== 5. Hybrid Greedy + SA with tracking =====================
+  function runHybridGreedySATracked(temperature, coolingRate, logEvery, seedVal) {
+    const rng = LCG(seedVal);
 
-    // ===================== 3. Greedy init + Simulated Annealing =====================
-    function greedyInitRoute(start = 0) {
-      const unvisited = new Set();
-      for (let i = 0; i < numPoints; i++) {
-        if (i !== start) unvisited.add(i);
-      }
-      const route = [start];
-      let current = start;
+    let currentRoute = greedyInitRoute(0);
+    let bestRoute = currentRoute.slice();
+    let bestDist = routeCost(bestRoute);
 
-      while (unvisited.size > 0) {
-        let bestJ = null;
-        let bestD = Infinity;
-        for (const j of unvisited) {
-          const d = pairCost(current, j);
-          if (d < bestD) {
-            bestD = d;
-            bestJ = j;
-          }
-        }
-        route.push(bestJ);
-        unvisited.delete(bestJ);
-        current = bestJ;
-      }
-      return route;
-    }
+    let T = temperature;
+    const history = [bestDist];
+    let steps = 0;
 
-    function runHybridGreedySATracked(
-      temperature = 5000,
-      coolingRate = 0.996,
-      logEvery = 100
-    ) {
-      let currentRoute = greedyInitRoute(0);
-      let bestRoute = currentRoute.slice();
-      let bestDist = routeCost(bestRoute);
-
-      let T = temperature;
-      let steps = 0;
-      const history = [bestDist];
-
-      while (T > 1) {
-        // pick two different indices
-        let i = Math.floor(Math.random() * numPoints);
-        let j = Math.floor(Math.random() * numPoints);
-        while (j === i) {
-          j = Math.floor(Math.random() * numPoints);
-        }
-        const a = Math.min(i, j);
-        const b = Math.max(i, j);
-
-        const newRoute = currentRoute.slice();
-        const sub = newRoute.slice(a, b + 1).reverse();
-        for (let k = a; k <= b; k++) {
-          newRoute[k] = sub[k - a];
-        }
-
-        const currDist = routeCost(currentRoute);
-        const newDist = routeCost(newRoute);
-
-        if (
-          newDist < currDist ||
-          Math.random() < Math.exp((currDist - newDist) / T)
-        ) {
-          currentRoute = newRoute;
-          if (newDist < bestDist) {
-            bestRoute = newRoute;
-            bestDist = newDist;
-          }
-        }
-
-        steps += 1;
-        if (steps % logEvery === 0) {
-          history.push(bestDist);
-        }
-        T *= coolingRate;
+    while (T > 1) {
+      const newRoute = currentRoute.slice();
+      const [i, j] = randomSample2(numPoints, rng);
+      const segment = newRoute.slice(i, j).reverse();
+      for (let k = i; k < j; k++) {
+        newRoute[k] = segment[k - i];
       }
 
-      if (history[history.length - 1] !== bestDist) {
+      const currDist = routeCost(currentRoute);
+      const newDist = routeCost(newRoute);
+
+      if (
+        newDist < currDist ||
+        rng() < Math.exp((currDist - newDist) / T)
+      ) {
+        currentRoute = newRoute;
+        if (newDist < bestDist) {
+          bestDist = newDist;
+          bestRoute = newRoute.slice();
+        }
+      }
+
+      steps += 1;
+      if (steps % logEvery === 0) {
         history.push(bestDist);
       }
-      return { bestRoute, bestDist, history };
+
+      T *= coolingRate;
     }
 
-    function runManyHybrid(
-      nRuns = 30,
-      temperature = 5000,
-      coolingRate = 0.996,
-      logEvery = 100
-    ) {
-      let bestGlobalRoute = null;
-      let bestGlobalDist = Infinity;
-
-      for (let r = 0; r < nRuns; r++) {
-        const { bestRoute, bestDist } = runHybridGreedySATracked(
-          temperature,
-          coolingRate,
-          logEvery
-        );
-        if (bestDist < bestGlobalDist) {
-          bestGlobalDist = bestDist;
-          bestGlobalRoute = bestRoute;
-        }
-      }
-      return { bestGlobalRoute, bestGlobalDist };
+    if (history[history.length - 1] !== bestDist) {
+      history.push(bestDist);
     }
 
-    // ===================== 4. Leaflet map setup =====================
-    const map = L.map("map");
-    const centerLat =
-      coords.reduce((acc, c) => acc + c[0], 0) / coords.length;
-    const centerLon =
-      coords.reduce((acc, c) => acc + c[1], 0) / coords.length;
+    return { bestRoute, bestDist, history };
+  }
 
-    map.setView([centerLat, centerLon], 14);
+  function runManyHybrid(nRuns, temperature, coolingRate, logEvery) {
+    let bestGlobalRoute = null;
+    let bestGlobalDist = Infinity;
+    let bestGlobalHist = null;
+    let bestSeed = null;
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "© OpenStreetMap contributors"
-    }).addTo(map);
+    for (let r = 0; r < nRuns; r++) {
+      const seedVal = 2025 + r;
+      const { bestRoute, bestDist, history } =
+        runHybridGreedySATracked(temperature, coolingRate, logEvery, seedVal);
 
-    let routeLayer = null;
-    let markerLayerGroup = L.layerGroup().addTo(map);
-
-    function drawRoute(route) {
-      if (routeLayer) {
-        map.removeLayer(routeLayer);
-      }
-      markerLayerGroup.clearLayers();
-
-      const latlngs = [];
-      for (const idx of route) {
-        const [lat, lon] = coords[idx];
-        latlngs.push([lat, lon]);
-        const marker = L.marker([lat, lon]).bindPopup(names[idx]);
-        markerLayerGroup.addLayer(marker);
-      }
-      // close cycle
-      const [lat0, lon0] = coords[route[0]];
-      latlngs.push([lat0, lon0]);
-
-      routeLayer = L.polyline(latlngs, { weight: 3 }).addTo(map);
-      map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
-    }
-
-    // ===================== 5. UI: button, timing, displaying route =====================
-    const runBtn = document.getElementById("runBtn");
-    const statusSpan = document.getElementById("status");
-    const timeSpan = document.getElementById("time");
-    const distSpan = document.getElementById("dist");
-    const routeListDiv = document.getElementById("route-list");
-    const nRunsInput = document.getElementById("nRuns");
-    const tempInput = document.getElementById("temperature");
-    const coolInput = document.getElementById("cooling");
-
-    runBtn.addEventListener("click", () => {
-      const nRuns = parseInt(nRunsInput.value || "30", 10);
-      const temperature = parseFloat(tempInput.value || "5000");
-      const cooling = parseFloat(coolInput.value || "0.996");
-
-      statusSpan.textContent = "Running...";
-      runBtn.disabled = true;
-      routeListDiv.textContent = "";
-
-      const t0 = performance.now();
-      const { bestGlobalRoute, bestGlobalDist } = runManyHybrid(
-        nRuns,
-        temperature,
-        cooling,
-        100
+      console.log(
+        `[Hybrid Greedy+SA] run ${r + 1}/${nRuns} | seed=${seedVal} | best=${bestDist.toFixed(
+          2
+        )} m`
       );
-      const t1 = performance.now();
-      const elapsedSec = (t1 - t0) / 1000.0;
 
-      statusSpan.textContent = "Finished.";
-      timeSpan.textContent = elapsedSec.toFixed(4) + " s";
-      distSpan.textContent =
-        bestGlobalDist.toFixed(2) +
-        " m (" +
-        (bestGlobalDist / 1000.0).toFixed(3) +
-        " km)";
+      if (bestDist < bestGlobalDist) {
+        bestGlobalDist = bestDist;
+        bestGlobalRoute = bestRoute;
+        bestGlobalHist = history;
+        bestSeed = seedVal;
+      }
+    }
 
-      let html = "<strong>Route order:</strong><br/>";
-      bestGlobalRoute.forEach((idx, i) => {
-        html +=
-          (i + 1) +
-          ". " +
-          names[idx] +
-          " (" +
-          coords[idx][0].toFixed(5) +
-          ", " +
-          coords[idx][1].toFixed(5) +
-          ")<br/>";
-      });
-      const firstIdx = bestGlobalRoute[0];
+    return { bestGlobalRoute, bestGlobalDist, bestGlobalHist, bestSeed };
+  }
+
+  // ===================== 6. Leaflet map =====================
+  const map = L.map("map");
+  const centerLat = coords.reduce((acc, c) => acc + c[0], 0) / coords.length;
+  const centerLon = coords.reduce((acc, c) => acc + c[1], 0) / coords.length;
+
+  map.setView([centerLat, centerLon], 14);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "© OpenStreetMap contributors"
+  }).addTo(map);
+
+  let routeLayer = null;
+  let markerLayerGroup = L.layerGroup().addTo(map);
+
+  function drawRoute(route) {
+    if (routeLayer) {
+      map.removeLayer(routeLayer);
+    }
+    markerLayerGroup.clearLayers();
+
+    const latlngs = [];
+    for (const idx of route) {
+      const [lat, lon] = coords[idx];
+      latlngs.push([lat, lon]);
+      const marker = L.marker([lat, lon]).bindPopup(names[idx]);
+      markerLayerGroup.addLayer(marker);
+    }
+    const [lat0, lon0] = coords[route[0]];
+    latlngs.push([lat0, lon0]);
+
+    routeLayer = L.polyline(latlngs, { weight: 3 }).addTo(map);
+    map.fitBounds(routeLayer.getBounds(), { padding: [30, 30] });
+  }
+
+  // ===================== 7. UI logic =====================
+  const runBtn = document.getElementById("runBtn");
+  const statusSpan = document.getElementById("status");
+  const timeSpan = document.getElementById("time");
+  const distSpan = document.getElementById("dist");
+  const routeListDiv = document.getElementById("route-list");
+
+  runBtn.addEventListener("click", () => {
+    statusSpan.textContent = "Running...";
+    runBtn.disabled = true;
+    routeListDiv.textContent = "";
+    timeSpan.textContent = "-";
+    distSpan.textContent = "-";
+
+    const t0 = performance.now();
+    const { bestGlobalRoute, bestGlobalDist } =
+      runManyHybrid(
+        30,      // nRuns
+        5000.0,  // temperature
+        0.996,   // coolingRate
+        100      // logEvery
+      );
+    const t1 = performance.now();
+    const elapsedSec = (t1 - t0) / 1000.0;
+
+    statusSpan.textContent = "Finished.";
+    timeSpan.textContent = elapsedSec.toFixed(4) + " s";
+    distSpan.textContent =
+      bestGlobalDist.toFixed(2) +
+      " m (" +
+      (bestGlobalDist / 1000.0).toFixed(3) +
+      " km)";
+
+    let html = "<strong>Best route (indices → names):</strong><br/>";
+    bestGlobalRoute.forEach((idx, i) => {
       html +=
-        "Return to: " +
-        names[firstIdx] +
+        (i + 1) +
+        ". [" +
+        idx +
+        "] " +
+        names[idx] +
         " (" +
-        coords[firstIdx][0].toFixed(5) +
+        coords[idx][0].toFixed(5) +
         ", " +
-        coords[firstIdx][1].toFixed(5) +
-        ")";
-      routeListDiv.innerHTML = html;
-
-      drawRoute(bestGlobalRoute);
-
-      runBtn.disabled = false;
+        coords[idx][1].toFixed(5) +
+        ")<br/>";
     });
-  </script>
+    const firstIdx = bestGlobalRoute[0];
+    html +=
+      "Return to: [" +
+      firstIdx +
+      "] " +
+      names[firstIdx] +
+      " (" +
+      coords[firstIdx][0].toFixed(5) +
+      ", " +
+      coords[firstIdx][1].toFixed(5) +
+      ")";
+    routeListDiv.innerHTML = html;
+
+    drawRoute(bestGlobalRoute);
+
+    runBtn.disabled = false;
+  });
+</script>
 </body>
 </html>
