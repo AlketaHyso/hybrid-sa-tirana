@@ -46,6 +46,7 @@ pre {
 <p id="deviceInfo"></p>
 
 <button id="runBtn">Run Benchmark</button>
+<button id="resetBtn" style="margin-left:10px;">Restart</button>
 <span id="status"></span>
 
 <h3>Initial L3 locations</h3>
@@ -313,6 +314,46 @@ document.getElementById("runBtn").onclick = function(){
   drawRouteOnMap(best);
 
   status.textContent=" Done.";
+};
+document.getElementById("resetBtn").onclick = function () {
+
+  // pastro tekstet
+  document.getElementById("output").textContent = "";
+  document.getElementById("routeNames").textContent = "";
+  document.getElementById("status").textContent = "";
+
+  // rikthe tekstin fillestar të L3
+  const initialPre = document.getElementById("initialL3");
+  let lines = [];
+  for(let i=0;i<numPoints;i++){
+    const [lat,lon] = coords[i];
+    lines.push(
+      `${i+1}. ${names[i]}  (lat=${lat.toFixed(4)}, lon=${lon.toFixed(4)})`
+    );
+  }
+  initialPre.textContent = lines.join("\n");
+
+  // pastro hartën
+  if(routeLayer){
+    map.removeLayer(routeLayer);
+    routeLayer = null;
+  }
+
+  // pastro të gjithë marker-at (pikat)
+  map.eachLayer(function(layer){
+    // lëre OSM tile layer pa u prekur
+    if(layer instanceof L.CircleMarker){
+      map.removeLayer(layer);
+    }
+  });
+
+  // rikthe zoom dhe qendrën te Tirana
+  map.setView([41.327, 19.82], 15);
+
+  // bëje butonin RUN të përdorshëm
+  document.getElementById("runBtn").disabled = false;
+
+  alert("Interface restarted. Ready for a new benchmark!");
 };
 </script>
 </body>
