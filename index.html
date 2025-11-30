@@ -239,18 +239,22 @@ let routeLayer = null;
 function drawRouteOnMap(route){
   if(routeLayer) map.removeLayer(routeLayer);
 
+  // Polyline me kthim në fillim (për mbylljen e turit)
   const latlngs = route.map(i => coords[i]);
-  latlngs.push(latlngs[0]); // kthim në fillim
+  latlngs.push(latlngs[0]);
 
   routeLayer = L.polyline(latlngs, {color:"red", weight:3}).addTo(map);
 
-  latlngs.forEach((p,i)=>{
-    L.circleMarker(p,{radius:4,color:"blue"}).addTo(map)
-     .bindTooltip(String(i+1), {permanent:true, direction:"right"});
+  // Marker-at dhe etiketat vetëm për 31 pikat reale të turit
+  route.forEach((idx, k) => {
+    const p = coords[idx];
+    L.circleMarker(p, {radius:4, color:"blue"}).addTo(map)
+      .bindTooltip(String(k + 1), {permanent:true, direction:"right"});
   });
 
   map.fitBounds(routeLayer.getBounds(), {padding:[30,30]});
 }
+
 
 /* ========== 9. Inicializim i device info & listes L3 ========== */
 
